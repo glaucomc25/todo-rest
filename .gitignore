@@ -1,0 +1,11 @@
+# Compilados Java
+*.class
+
+# Logs
+*.log
+
+# Build
+build/
+
+# database
+db/
