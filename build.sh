@@ -21,6 +21,10 @@ mkdir -p "$DB_DIR"
 # Monta o classpath separando os JARs por :
 CLASSPATH=$(echo $WEB/WEB-INF/lib/* | tr ' ' ':')
 
+# Criar/atualizar banco antes da compilação
+echo "== Creating/Updating database =="
+./create-db.sh
+
 echo "== COMPILANDO =="
 javac -cp "$CLASSPATH" -d "$CLASSES_DIR" $(find "$SRC" -name "*.java")
 
@@ -61,10 +65,10 @@ cp -r "$BUILD_DIR" "$DEPLOY_DIR"
 
 #cp todo-rest.war /opt/tomcat/tomcat11/webapps/
 
-#echo "==> Reiniciando Tomcat..."
-#$TOMCAT_HOME/bin/shutdown.sh 2>/dev/null
-#sleep 3
-#$TOMCAT_HOME/bin/startup.sh
+echo "==> Reiniciando Tomcat..."
+$TOMCAT_HOME/bin/shutdown.sh 2>/dev/null
+sleep 3
+$TOMCAT_HOME/bin/startup.sh
 
 
 echo "==> Deploy concluído."
