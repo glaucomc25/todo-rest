@@ -27,6 +27,8 @@ public class TaskApiServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         gson = new GsonBuilder().setPrettyPrinting().create();
+
+        // Banco fora da aplicação
         this.factory = new ConnectionFactory("jdbc:sqlite:" + URL.getDatabasePath());
 
         // Apenas valida se o banco é acessível
