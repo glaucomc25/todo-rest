@@ -16,19 +16,9 @@ public class TaskDAO implements AutoCloseable {
         this.factory = factory;
     }
 
+    @Override
     public void close() {
-        // Nada a fechar, cada método usa try-with-resources
-    }
-
-    // ---------- Cria a tabela se não existir ----------
-    public void createTableIfNotExists() throws SQLException {
-        String sql = "CREATE TABLE IF NOT EXISTS tasks (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "description TEXT NOT NULL)";
-        try ( Connection conn = factory.getConnection();
-              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.execute();
-        }
+        // Não precisa fechar nada, cada método já usa try-with-resources
     }
 
     // ---------- Insere uma nova task ----------

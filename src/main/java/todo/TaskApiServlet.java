@@ -27,15 +27,13 @@ public class TaskApiServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         gson = new GsonBuilder().setPrettyPrinting().create();
-        String absolutePath = URL.getDatabasePath();
-        this.factory = new ConnectionFactory("jdbc:sqlite:" + absolutePath);
+        this.factory = new ConnectionFactory("jdbc:sqlite:" + URL.getDatabasePath());
 
-        // Inicializa a tabela
-        try (TaskDAO dao = new TaskDAO(factory)) {
-            dao.createTableIfNotExists();
-            logger.info("Banco inicializado em: " + absolutePath);
+        // Apenas valida se o banco é acessível
+        try (Connection c = factory.getConnection()) {
+            logger.info("Banco conectado com sucesso em: " + URL.getDatabasePath());
         } catch (SQLException e) {
-            throw new ServletException("Falha ao inicializar o banco", e);
+            throw new ServletException("Não foi possível conectar ao banco", e);
         }
     }
 
