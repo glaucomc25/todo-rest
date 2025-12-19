@@ -12,16 +12,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.BufferedReader;
-
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
-import java.util.List;
-
 
 public class TaskApiServlet extends HttpServlet {
 
@@ -31,176 +26,210 @@ public class TaskApiServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-
         gson = new GsonBuilder().setPrettyPrinting().create();
+        String absolutePath = URL.getDatabasePath();
+        this.factory = new ConnectionFactory("jdbc:sqlite:" + absolutePath);
 
-        // Pega a factory que o AppListener colocou no ServletContext
-        factory = (ConnectionFactory) getServletContext().getAttribute("factory");
-        if (factory == null) {
-            throw new ServletException("ConnectionFactory não encontrada no ServletContext");
+        // Inicializa a tabela
+        try (TaskDAO dao = new TaskDAO(factory)) {
+            dao.createTableIfNotExists();
+            logger.info("Banco inicializado em: " + absolutePath);
+        } catch (SQLException e) {
+            throw new ServletException("Falha ao inicializar o banco", e);
         }
     }
 
-    // ---------- GET /tasks ou /tasks?id=1 ----------
+    // ---------- GET /tasks ou /tasks/{id} ----------
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+            throws IOException {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-
-        String pathInfo = req.getPathInfo(); // pega o que vem depois de /tasks
-
+        String pathInfo = req.getPathInfo();
         try (PrintWriter out = resp.getWriter()) {
-
+            // GET /tasks → lista todas as tarefas
             if (pathInfo == null || pathInfo.equals("/")) {
                 // GET /tasks → lista todas as tarefas
                 try (TaskDAO dao = new TaskDAO(factory)) {
                     List<Task> tasks = dao.listAll();
-                    String json = gson.toJson(tasks);
-                    out.println(json);
+                    out.println(gson.toJson(tasks));
                 } catch (SQLException e) {
-                    logger.log(Level.SEVERE, "Erro ao listar tasks", e); // registra stacktrace no log
+                    logger.log(Level.SEVERE, "Erro ao listar tasks", e);
                     resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                     out.println("{\"error\":\"Erro ao listar tasks\"}");
                 }
-            } else {
-                // GET /tasks/{id} → busca tarefa específica
-                int id;
-                try {
-                    id = Integer.parseInt(pathInfo.substring(1)); // remove a barra inicial
-                } catch (NumberFormatException e) {
-                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                    out.println("{\"error\":\"ID must be a number\"}");
-                    return;
-                }
+                return;
+            } 
+            // GET /tasks/{id} → busca tarefa específica
+            int id;
+            try {
+                id = Integer.parseInt(pathInfo.substring(1));
+            } catch (NumberFormatException e) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                out.println("{\"error\":\"ID must be a number\"}");
+                return;
+            }
 
-                try (TaskDAO dao = new TaskDAO(factory)) {
-                    Task task = dao.getById(id);
-                    if (task != null) {
-                        out.println(gson.toJson(task));
-                    } else {
-                        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                        out.println("{\"error\":\"Task not found\"}");
-                    }
-                } catch (SQLException e) {
-                    logger.log(Level.SEVERE, "Erro ao listar tasks", e); // stacktrace vai para o log                    
-                    resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                    out.println("{\"error\":\"Erro ao buscar task\"}");
+            try (TaskDAO dao = new TaskDAO(factory)) {
+                Task task = dao.getById(id);
+                if (task != null) {
+                    out.println(gson.toJson(task));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    out.println("{\"error\":\"Task not found\"}");
                 }
+            } catch (SQLException e) {
+                logger.log(Level.SEVERE, "Erro ao buscar task", e);
+                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                out.println("{\"error\":\"Erro ao buscar task\"}");
             }
         }
     }
 
-        
     // ---------- POST /tasks ----------
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+            throws  IOException {
 
-        resp.setContentType("application/json");
+        resp.setContentType("application/json;charset=UTF-8");
 
-        // Lê JSON do request
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = req.getReader()) {
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
+        // Lê JSON do corpo
+        JsonObject json;
+        try {
+            json = gson.fromJson(req.getReader(), JsonObject.class); 
+        } catch (Exception e) {
+             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+             resp.getWriter().println("{\"error\":\"Invalid JSON\"}");
+            return;
         }
-
-        JsonObject json = gson.fromJson(sb.toString(), JsonObject.class);
+        if (!json.has("description") || json.get("description").getAsString().isBlank()) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().println("{\"error\":\"Description is required\"}");
+            return;
+        }
         String description = json.get("description").getAsString();
 
-         try (TaskDAO dao = new TaskDAO(factory);
-             PrintWriter out = resp.getWriter()) {
-
+        PrintWriter out = resp.getWriter();
+        try (TaskDAO dao = new TaskDAO(factory)) {
             int id = dao.insert(description);
+            resp.setStatus(HttpServletResponse.SC_CREATED);
 
             JsonObject response = new JsonObject();
             response.addProperty("id", id);
             response.addProperty("description", description);
-
             out.println(gson.toJson(response));
 
         } catch (SQLException e) {
-            logger.log(Level.SEVERE, "Erro ao inserir task", e); // registra stacktrace no log
-            throw new ServletException("Erro ao inserir task", e);
+            logger.log(Level.SEVERE, "Erro ao inserir task", e);
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            out.println("{\"error\":\"Erro ao inserir task\"}");
         }
     }
 
+    // ---------- PUT /tasks/{id} ----------
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+            throws  IOException {
 
         resp.setContentType("application/json;charset=UTF-8");
+        String pathInfo = req.getPathInfo();
 
-        String pathInfo = req.getPathInfo(); // "/1"
         if (pathInfo == null || pathInfo.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().println("{\"error\":\"ID is required in URL\"}");
+            try (PrintWriter out = resp.getWriter()) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                out.println("{\"error\":\"ID is required in URL\"}");
+            }
             return;
         }
-        //obtem o parametro apos o "/" como em "/1" pega o 1
-        int id = Integer.parseInt(pathInfo.substring(1));
+
+        int id;
+        try {
+            id = Integer.parseInt(pathInfo.substring(1));
+        } catch (NumberFormatException e) {
+            try (PrintWriter out = resp.getWriter()) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                out.println("{\"error\":\"ID must be a number\"}");
+            }
+            return;
+        }
 
         // Lê JSON do corpo
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = req.getReader()) {
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
+        JsonObject json;
+        try {
+            json = gson.fromJson(req.getReader(), JsonObject.class);
+        } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().println("{\"error\":\" \"Invalid JSON\" \"}");
+            return;
         }
-       
-        JsonObject json = gson.fromJson(sb.toString(), JsonObject.class);
+
+        if (!json.has("description") || json.get("description").getAsString().isBlank()) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().println("{\"error\":\" \"Description is required\" \"}");            
+            return;
+        }
+
         String description = json.get("description").getAsString();
 
-        try (TaskDAO dao = new TaskDAO(factory);
-             PrintWriter out = resp.getWriter()) {
-
+        PrintWriter out = resp.getWriter();
+        try (TaskDAO dao = new TaskDAO(factory)) {
             boolean updated = dao.update(id, description);
-
             if (updated) {
-                out.println("{\"status\":\"Task updated\"}");
+                JsonObject response = new JsonObject();
+                response.addProperty("id", id);
+                response.addProperty("description", description);
+                out.println(gson.toJson(response));
             } else {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 out.println("{\"error\":\"Task not found\"}");
             }
         } catch (SQLException e) {
-            logger.log(Level.SEVERE, "Erro ao atualizar task", e); // registra stacktrace no log
-            throw new ServletException("Erro ao atualizar task", e);
+            logger.log(Level.SEVERE, "Erro ao atualizar task", e);
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            out.println("{\"error\":\"Erro ao atualizar task\"}");
         }
     }
 
-  // ---------- DELETE /tasks/{id} ----------
+    // ---------- DELETE /tasks/{id} ----------
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+            throws IOException {
 
-        resp.setContentType("application/json;charset=UTF-8"); // UTF-8 garante caracteres especiais
-
-        String pathInfo = req.getPathInfo(); // "/1"
+        resp.setContentType("application/json;charset=UTF-8");
+        String pathInfo = req.getPathInfo();
 
         if (pathInfo == null || pathInfo.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().println("{\"error\":\"ID is required in URL\"}");
+            try (PrintWriter out = resp.getWriter()) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                out.println("{\"error\":\"ID is required in URL\"}");
+            }
             return;
         }
 
-        int id = Integer.parseInt(pathInfo.substring(1));
-
-        try (TaskDAO dao = new TaskDAO(factory);
-            PrintWriter out = resp.getWriter()) {
-
+        int id;
+        try {
+            id = Integer.parseInt(pathInfo.substring(1));
+        } catch (NumberFormatException e) {
+            try (PrintWriter out = resp.getWriter()) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                out.println("{\"error\":\"ID must be a number\"}");
+            }
+            return;
+        }
+        PrintWriter out = resp.getWriter();
+        try (TaskDAO dao = new TaskDAO(factory)) {
             boolean deleted = dao.delete(id);
-
             if (deleted) {
-                resp.getWriter().println("{\"status\":\"Task deleted\"}");
+                resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
             } else {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                resp.getWriter().println("{\"error\":\"Task not found\"}");
+                out.println("{\"error\":\"Task not found\"}");
             }
         } catch (SQLException e) {
-            logger.log(Level.SEVERE, "Erro ao deletar task", e); // registra stacktrace no log
-            throw new ServletException("Erro ao deletar task", e);
+            logger.log(Level.SEVERE, "Erro ao deletar task", e);
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            out.println("{\"error\":\"Erro ao deletar task\"}");
         }
     }
 }

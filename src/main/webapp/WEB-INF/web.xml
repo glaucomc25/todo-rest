@@ -10,11 +10,6 @@
         <param-value>WEB-INF/db/todo.db</param-value>
     </context-param>
     
-    <!-- Listener para inicializar recursos globais -->
-    <listener>
-        <listener-class>todo.AppListener</listener-class>
-    </listener>
-
     <servlet>
         <servlet-name>TaskApiServlet</servlet-name>
         <servlet-class>todo.TaskApiServlet</servlet-class>
