@@ -8,17 +8,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TaskDAO implements AutoCloseable {
+public class TaskDAO implements TaskRepository {
 
     private ConnectionFactory factory;
 
     public TaskDAO(ConnectionFactory factory) {
         this.factory = factory;
-    }
-
-    @Override
-    public void close() {
-        // Não precisa fechar nada, cada método já usa try-with-resources
     }
 
     // ---------- Insere uma nova task ----------

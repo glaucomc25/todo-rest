@@ -22,6 +22,7 @@ public class TaskApiServlet extends HttpServlet {
 
     private ConnectionFactory factory;
     private Gson gson;
+    private TaskRepository repository;
     private static final Logger logger = Logger.getLogger(TaskApiServlet.class.getName());
 
     @Override
@@ -29,14 +30,15 @@ public class TaskApiServlet extends HttpServlet {
         gson = new GsonBuilder().setPrettyPrinting().create();
 
         // Banco fora da aplicação
-        this.factory = new ConnectionFactory("jdbc:sqlite:" + URL.getDatabasePath());
+        factory = new ConnectionFactory("jdbc:sqlite:" + URL.getDatabasePath());
 
-        // Apenas valida se o banco é acessível
         try (Connection c = factory.getConnection()) {
             logger.info("Banco conectado com sucesso em: " + URL.getDatabasePath());
         } catch (SQLException e) {
             throw new ServletException("Não foi possível conectar ao banco", e);
         }
+        // inversao de dependencia
+        repository = new TaskDAO(factory);
     }
 
     // ---------- GET /tasks ou /tasks/{id} ----------
@@ -51,8 +53,8 @@ public class TaskApiServlet extends HttpServlet {
             // GET /tasks → lista todas as tarefas
             if (pathInfo == null || pathInfo.equals("/")) {
                 // GET /tasks → lista todas as tarefas
-                try (TaskDAO dao = new TaskDAO(factory)) {
-                    List<Task> tasks = dao.listAll();
+                try {
+                    List<Task> tasks = repository.listAll();
                     out.println(gson.toJson(tasks));
                 } catch (SQLException e) {
                     logger.log(Level.SEVERE, "Erro ao listar tasks", e);
@@ -71,8 +73,8 @@ public class TaskApiServlet extends HttpServlet {
                 return;
             }
 
-            try (TaskDAO dao = new TaskDAO(factory)) {
-                Task task = dao.getById(id);
+            try {
+                Task task = repository.getById(id);
                 if (task != null) {
                     out.println(gson.toJson(task));
                 } else {
@@ -111,8 +113,8 @@ public class TaskApiServlet extends HttpServlet {
         String description = json.get("description").getAsString();
 
         PrintWriter out = resp.getWriter();
-        try (TaskDAO dao = new TaskDAO(factory)) {
-            int id = dao.insert(description);
+        try {
+            int id = repository.insert(description);
             resp.setStatus(HttpServletResponse.SC_CREATED);
 
             JsonObject response = new JsonObject();
@@ -173,8 +175,8 @@ public class TaskApiServlet extends HttpServlet {
         String description = json.get("description").getAsString();
 
         PrintWriter out = resp.getWriter();
-        try (TaskDAO dao = new TaskDAO(factory)) {
-            boolean updated = dao.update(id, description);
+        try {
+            boolean updated = repository.update(id, description);
             if (updated) {
                 JsonObject response = new JsonObject();
                 response.addProperty("id", id);
@@ -218,8 +220,8 @@ public class TaskApiServlet extends HttpServlet {
             return;
         }
         PrintWriter out = resp.getWriter();
-        try (TaskDAO dao = new TaskDAO(factory)) {
-            boolean deleted = dao.delete(id);
+        try {
+            boolean deleted = repository.delete(id);
             if (deleted) {
                 resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
             } else {
