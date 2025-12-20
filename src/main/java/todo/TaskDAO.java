@@ -8,27 +8,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TaskDAO implements AutoCloseable {
+public class TaskDAO implements TaskRepository {
 
     private ConnectionFactory factory;
 
     public TaskDAO(ConnectionFactory factory) {
         this.factory = factory;
-    }
-
-    public void close() {
-        // Nada a fechar, cada método usa try-with-resources
-    }
-
-    // ---------- Cria a tabela se não existir ----------
-    public void createTableIfNotExists() throws SQLException {
-        String sql = "CREATE TABLE IF NOT EXISTS tasks (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "description TEXT NOT NULL)";
-        try ( Connection conn = factory.getConnection();
-              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.execute();
-        }
     }
 
     // ---------- Insere uma nova task ----------

@@ -1,75 +1,75 @@
 #!/bin/bash
 
-set -e  #abortar se qualquer comando retornar erro (codigo != 0)
+set -e  # aborta se algum comando falhar
 
-# Diretórios
+# ----------------------------
+# CONFIGURAÇÃO
+# ----------------------------
 TOMCAT_HOME="/opt/tomcat/tomcat11"
+APP_NAME="todo-rest"
+
 SRC="src/main/java"
 WEB="src/main/webapp"
 BUILD_DIR="build"
 CLASSES_DIR="$BUILD_DIR/WEB-INF/classes"
 LIB_DIR="$BUILD_DIR/WEB-INF/lib"
-DB_DIR="$BUILD_DIR/WEB-INF/db" 
-APP_NAME="todo-rest"
 
-# Limpa build antigo
+# ----------------------------
+# BANCO DE DADOS EXTERNO
+# ----------------------------
+EXTERNAL_DB_DIR="$HOME/databases"
+DB_FILE="$EXTERNAL_DB_DIR/todo.db"
+SCHEMA_FILE="src/main/resources/db/schema.sql"
+
+mkdir -p "$EXTERNAL_DB_DIR"
+
+echo "== Creating database =="
+if [ ! -f "$DB_FILE" ]; then
+    sqlite3 "$DB_FILE" < "$SCHEMA_FILE"
+    echo "Database created at $DB_FILE"
+else
+    echo "Database already exists at $DB_FILE"
+fi
+
+# ----------------------------
+# LIMPA BUILD ANTIGO
+# ----------------------------
 rm -rf "$BUILD_DIR"
 mkdir -p "$CLASSES_DIR"
 mkdir -p "$LIB_DIR"
-mkdir -p "$DB_DIR"
 
-# Monta o classpath separando os JARs por :
+# ----------------------------
+# COMPILANDO
+# ----------------------------
 CLASSPATH=$(echo $WEB/WEB-INF/lib/* | tr ' ' ':')
-
-# Criar/atualizar banco antes da compilação
-echo "== Creating/Updating database =="
-./create-db.sh
 
 echo "== COMPILANDO =="
 javac -cp "$CLASSPATH" -d "$CLASSES_DIR" $(find "$SRC" -name "*.java")
 
-
-# Copiar bibliotecas para o build
+# ----------------------------
+# COPIA LIBS
+# ----------------------------
 cp $WEB/WEB-INF/lib/* $LIB_DIR
 
-# Criar o diretorio para o banco
-# Apaga o diretório se existir
-if [ -d "$DB_DIR" ]; then
-    rm -rf "$DB_DIR"
-fi
-
-# Cria o diretório novamente
-mkdir -p "$DB_DIR"
-
-# Copiar web.xml
+# ----------------------------
+# COPIA WEB.XML
+# ----------------------------
 mkdir -p "$BUILD_DIR/WEB-INF"
 cp $WEB/WEB-INF/web.xml $BUILD_DIR/WEB-INF/
 
-
-
 # ----------------------------
-# DEPLOY EXPLAINED NO TOMCAT
+# DEPLOY NO TOMCAT
 # ----------------------------
 DEPLOY_DIR="$TOMCAT_HOME/webapps/$APP_NAME"
 echo "== DEPLOY NO TOMCAT ($DEPLOY_DIR) =="
-rm -rf "$DEPLOY_DIR"           # remove deploy antigo
+rm -rf "$DEPLOY_DIR"
 cp -r "$BUILD_DIR" "$DEPLOY_DIR"
 
-
-#echo "== GERANDO WAR =="
-#cd "$BUILD_DIR"
-#jar cvf ../todo-rest.war *
-#cd ..
-
-#echo "WAR gerado em: todo-rest.war"
-
-#cp todo-rest.war /opt/tomcat/tomcat11/webapps/
-
 echo "==> Reiniciando Tomcat..."
-$TOMCAT_HOME/bin/shutdown.sh 2>/dev/null
+$TOMCAT_HOME/bin/shutdown.sh 2>/dev/null || true
 sleep 3
 $TOMCAT_HOME/bin/startup.sh
 
-
 echo "==> Deploy concluído."
 echo "Acesse: http://localhost:8080/$APP_NAME/"
+echo "Banco usado: $DB_FILE"
