@@ -1,11 +1,14 @@
+# Windows/WSL metadata
+*:Zone.Identifier
+
+# Maven Build
+target/
+*.war
+
 # Compilados Java
 *.class
 
 # Logs
 *.log
 
-# Build
-build/
-
-# database
-db/
+todo.db

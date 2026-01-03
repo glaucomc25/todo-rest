@@ -1,10 +1,13 @@
 package todo;
 
+import java.io.File;
+
 public class URL {
 
-    private static final String DB_PATH = "/home/glauco/Projects/todo-rest/src/main/webapp/WEB-INF/db/todo.db";
-
     public static String getDatabasePath() {
-        return DB_PATH;
+        // Pega o caminho absoluto do diretório WEB-INF/db
+        String path = "/home/glauco/databases/todo.db"; // ou use um path relativo à sua estrutura
+        File dbFile = new File(path);
+        return dbFile.getAbsolutePath();
     }
 }
